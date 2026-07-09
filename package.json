@@ -1,0 +1,20 @@
+{
+  "name": "aa-community-automation",
+  "version": "1.0.0",
+  "description": "Playwright UI + API automation for Automation Anywhere Community Edition (Form Rules Builder + Learning Instance API)",
+  "type": "commonjs",
+  "scripts": {
+    "test": "playwright test",
+    "test:ui": "playwright test tests/ui --headed",
+    "test:api": "playwright test tests/api",
+    "test:usecase1": "playwright test --grep @usecase1",
+    "test:usecase2": "playwright test --grep @usecase2",
+    "report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.48.0"
+  },
+  "dependencies": {
+    "dotenv": "^17.4.2"
+  }
+}
