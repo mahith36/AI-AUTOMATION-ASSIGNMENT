@@ -35,6 +35,11 @@ jobs:
 
       - name: Execute all test cases
         run: npm test
+        env:
+          APP_BASE_URL: https://community.cloud.automationanywhere.digital
+          API_BASE_URL: https://community.cloud.automationanywhere.digital
+          AA_EMAIL: ${{ secrets.AA_EMAIL }}
+          AA_PASSWORD: ${{ secrets.AA_PASSWORD }}
 
       - name: Configure GitHub Pages
         if: github.ref == 'refs/heads/main'

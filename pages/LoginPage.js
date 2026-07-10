@@ -4,8 +4,9 @@ const { ENV } = require('../config/env');
 
 class LoginPage extends BasePage {
   /**
-   * Logs into Automation Anywhere Community Edition.
-   * Navigates to login page, fills credentials, clicks login.
+   * Logs into Automation Anywhere Community Edition through the real login page.
+   * Note: AA CE allows a single active session per user — logging in here
+   * invalidates any other session (UI or API) for the same account.
    */
   async login(email = ENV.LOGIN_EMAIL, password = ENV.LOGIN_PASSWORD) {
     if (!email || !password) {
@@ -14,18 +15,16 @@ class LoginPage extends BasePage {
       );
     }
 
-    // Navigate to the login page
-    await this.page.goto(ENV.APP_BASE_URL + ENV.LOGIN_PATH, { waitUntil: 'domcontentloaded' });
-    await this.page.waitForTimeout(2000);
+    await this.page.goto(ENV.APP_BASE_URL + ENV.LOGIN_PATH, {
+      waitUntil: 'domcontentloaded',
+    });
 
-    // Fill credentials
     await login.usernameInput(this.page).fill(email);
     await login.passwordInput(this.page).fill(password);
     await login.submitButton(this.page).click();
 
-    // Wait for login to complete — the dashboard or home page should load
-    await this.page.waitForURL(/\/#\/(home|dashboard)/, { timeout: 15_000 });
-    await this.page.waitForTimeout(2000);
+    // Successful login lands on #/home (Explore) or #/dashboard.
+    await this.page.waitForURL(/#\/(home|dashboard)/, { timeout: 45_000 });
   }
 }
 

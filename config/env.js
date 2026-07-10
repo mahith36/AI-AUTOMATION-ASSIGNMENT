@@ -1,36 +1,35 @@
 /**
  * Central configuration for Automation Anywhere Community Edition.
- * Values sourced from .env or sensible defaults for the real AA tenant.
+ * Values come from .env (see .env.example); endpoints were identified live
+ * from the browser Network tab against the real AA CE tenant.
  */
 require("dotenv").config();
 
 const ENV = {
-  // Real AA Community Edition tenant URL
   APP_BASE_URL:
     process.env.APP_BASE_URL ||
     "https://community.cloud.automationanywhere.digital",
 
-  // API base path — real REST calls go through /v2/, /v3/, etc.
   API_BASE_URL:
     process.env.API_BASE_URL ||
     "https://community.cloud.automationanywhere.digital",
 
-  // Credentials from .env
   LOGIN_EMAIL: process.env.AA_EMAIL || "",
   LOGIN_PASSWORD: process.env.AA_PASSWORD || "",
 
-  // Auth endpoint — captured from Network tab on login
-  AUTH_ENDPOINT: process.env.AUTH_ENDPOINT || "/v1/authentication",
+  // Captured from Network tab: the login page calls POST /v2/authentication.
+  // (/v1/authentication returns 404 on Community Edition.)
+  AUTH_ENDPOINT: "/v2/authentication",
 
-  // Learning Instance (Document Automation) endpoint
-  LEARNING_INSTANCE_ENDPOINT:
-    process.env.LEARNING_INSTANCE_ENDPOINT || "/v2/learninginstances",
+  // Learning Instance (Document Automation / IQ Bot) endpoints live under
+  // /cognitive/v3/. Exact paths are in utils/apiClient.js.
+  DOMAINS_ENDPOINT: "/cognitive/v3/domains",
+  LEARNING_INSTANCES_ENDPOINT: "/cognitive/v3/learninginstances",
 
-  // Paths
+  // SPA routes
   LOGIN_PATH: "/#/login",
-  AUTOMATION_PATH: "/#/bots/repository/private/folders/32982643",
-  DOCUMENT_AUTOMATION_PATH:
-    "/#/modules/cognitive/iqbot/pages/learning-instances",
+  REPOSITORY_PATH: "/#/bots/repository/private",
+  LEARNING_INSTANCES_PATH: "/#/modules/cognitive/iqbot/pages/learning-instances",
 };
 
 module.exports = { ENV };

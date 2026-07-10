@@ -1,152 +1,190 @@
-const { BasePage } = require("./BasePage");
-const { formBuilder } = require("../config/selectors");
-const { ENV } = require("../config/env");
+const { BasePage } = require('./BasePage');
+const { nav, formBuilder } = require('../config/selectors');
+const { ENV } = require('../config/env');
 
 class FormBuilderPage extends BasePage {
-  async openNewForm(formName = "AutoTestForm") {
-    // Navigate to Automation using direct URL
-    await this.page.goto(ENV.APP_BASE_URL + "/#/bots/repository", {
-      waitUntil: "domcontentloaded",
+  /**
+   * Navigates to Automation, creates a new Form via Create → Form…,
+   * and waits for the form editor iframe to load.
+   * @returns {string} the created form's name
+   */
+  async createNewForm(baseName = 'AutoTestForm') {
+    // Unique name — AA rejects duplicate file names in the repository.
+    const formName = `${baseName}-${Date.now()}`;
+
+    await this.page.goto(ENV.APP_BASE_URL + ENV.REPOSITORY_PATH, {
+      waitUntil: 'domcontentloaded',
     });
-    await this.page.waitForTimeout(3000);
-
-    // Click Create to open dropdown — use aria-label
-    const createBtn = this.page.locator('button[aria-label="Create"]').first();
-    await createBtn.waitFor({ state: "visible", timeout: 10_000 });
-    await createBtn.click();
-    await this.page.waitForTimeout(2000);
-
-    // The dropdown is open — find "Form…" button by text
-    const formOption = this.page.locator("button").filter({ hasText: /^\s*Form/ }).first();
-    await formOption.waitFor({ state: "visible", timeout: 5_000 }).catch(() => {});
-    await formOption.click({ force: true });
+    await nav.createButton(this.page).waitFor({ state: 'visible', timeout: 30_000 });
+    // The repository table keeps loading briefly after the header renders.
     await this.page.waitForTimeout(1500);
 
-    // Fill the "Create form" dialog
-    const nameInput = this.page.locator('[role="dialog"] input[name="name"]');
-    await nameInput.waitFor({ state: "visible", timeout: 5_000 });
-    await nameInput.clear();
-    await nameInput.fill(formName);
+    await nav.createButton(this.page).click();
+    await nav.createFormOption(this.page).click();
 
-    // Click "Create & edit"
-    const createEditBtn = this.page.locator('[role="dialog"] button').filter({ hasText: "Create & edit" });
-    await createEditBtn.click();
-    await this.page.waitForTimeout(2000);
+    await nav.dialogNameInput(this.page).waitFor({ state: 'visible' });
+    await nav.dialogNameInput(this.page).fill(formName);
+    await nav.dialogCreateEditButton(this.page).click();
 
-    // Wait for the form editor iframe to appear
-    await this.page.waitForSelector('iframe[src*="file/form"], iframe[src*="attended"]', {
-      timeout: 15_000,
-    });
-    await this.page.waitForTimeout(3000);
+    await nav.editorIframe(this.page).waitFor({ state: 'visible', timeout: 45_000 });
+    // Let the editor SPA inside the iframe finish booting.
+    await this.waitForEditorFrame();
+    await this.frameLocatorReady();
 
-    // Extract form ID for cleanup
-    const url = this.page.url();
-    const match = url.match(/files\/(\d+)\//);
-    this._formId = match ? match[1] : null;
-    return this._formId;
+    this._formName = formName;
+    return formName;
   }
 
-  _getFormEditorFrame() {
-    const frames = this.page.frames();
-    const formFrame = frames.find(
-      (f) => f.url().includes("file/form") || f.url().includes("/form/edit")
-    );
-    if (!formFrame) {
+  /**
+   * The form editor iframe's Frame object. Resolves the CURRENT frame each time
+   * (it is replaced on reload). The editor iframe lives at
+   * modules/attended/#/file/form/{id}/edit — distinct from the outer SPA hash
+   * URL which contains the singular "module/attended".
+   */
+  get frame() {
+    const frame = this.page.frames().find((f) => /modules\/attended/.test(f.url()));
+    if (!frame) {
       throw new Error(
-        `Form editor iframe not found. Available frames: ${frames.map((f) => f.url()).join(", ")}`
+        `Form editor iframe not found. Frames: ${this.page.frames().map((f) => f.url()).join(', ')}`
       );
     }
-    return formFrame;
+    return frame;
   }
 
-  get frame() {
-    if (!this._frame) this._frame = this._getFormEditorFrame();
-    return this._frame;
+  /**
+   * Waits until the editor iframe's Frame object has attached and navigated to
+   * the attended editor URL. The <iframe> element can be visible before its
+   * Frame commits navigation, so poll page.frames() rather than assume it.
+   */
+  async waitForEditorFrame(timeout = 45_000) {
+    const deadline = Date.now() + timeout;
+    while (Date.now() < deadline) {
+      const frame = this.page.frames().find((f) => /modules\/attended/.test(f.url()));
+      if (frame) return frame;
+      await this.page.waitForTimeout(500);
+    }
+    throw new Error(
+      `Editor iframe never attached. Frames: ${this.page.frames().map((f) => f.url()).join(', ')}`
+    );
   }
 
+  async frameLocatorReady() {
+    await formBuilder
+      .paletteItem(this.frame, 'Text Box')
+      .waitFor({ state: 'attached', timeout: 45_000 });
+    await this.page.waitForTimeout(1000);
+  }
+
+  /**
+   * Drags a palette element onto the canvas with real mouse events.
+   * IMPORTANT: locator.boundingBox() coordinates are already relative to the
+   * main-frame viewport (even for elements inside the iframe) — do NOT add
+   * the iframe's own offset.
+   */
   async addTextboxToCanvas() {
     const frame = this.frame;
-    const paletteItem = formBuilder.paletteItem(frame, "Text Box");
-    const dropTarget = formBuilder.canvasDropTarget(frame);
+    const palette = formBuilder.paletteItem(frame, 'Text Box');
+    await palette.scrollIntoViewIfNeeded();
+    await this.page.waitForTimeout(400);
 
-    await paletteItem.scrollIntoViewIfNeeded();
-    await this.page.waitForTimeout(500);
+    const before = await formBuilder.canvasRows(frame).count();
 
-    const iframeEl = this.page.locator('iframe[src*="file/form"]');
-    const iframeBox = await iframeEl.boundingBox();
-    if (!iframeBox) throw new Error("Cannot locate form editor iframe");
+    const from = await palette.boundingBox();
+    const canvas = await formBuilder.canvas(frame).boundingBox();
+    if (!from || !canvas) throw new Error('Cannot resolve drag coordinates');
 
-    const tbBox = await paletteItem.boundingBox();
-    if (!tbBox) throw new Error("Cannot locate Text Box palette item");
-    const dzBox = await dropTarget.boundingBox();
-    if (!dzBox) throw new Error("Cannot locate canvas drop target");
-
-    const startX = iframeBox.x + tbBox.x + tbBox.width / 2;
-    const startY = iframeBox.y + tbBox.y + tbBox.height / 2;
-    const endX = iframeBox.x + dzBox.x + 50;
-    const endY = iframeBox.y + dzBox.y + 30;
-
-    await this.page.mouse.move(startX, startY);
-    await this.page.waitForTimeout(100);
-    await this.page.mouse.down();
-    await this.page.waitForTimeout(200);
-
-    const steps = 10;
-    for (let i = 1; i <= steps; i++) {
-      await this.page.mouse.move(
-        startX + ((endX - startX) * i) / steps,
-        startY + ((endY - startY) * i) / steps,
-        { steps: 2 }
-      );
-      await this.page.waitForTimeout(80);
+    const sx = from.x + from.width / 2;
+    const sy = from.y + from.height / 2;
+    const ex = canvas.x + canvas.width / 2;
+    let ey;
+    if (before > 0) {
+      const lastRow = await formBuilder.canvasRows(frame).last().boundingBox();
+      ey = lastRow.y + lastRow.height + 25; // drop below the last element
+    } else {
+      ey = canvas.y + 60;
     }
-    await this.page.waitForTimeout(200);
+
+    await this.page.mouse.move(sx, sy);
+    await this.page.mouse.down();
+    for (let i = 1; i <= 12; i++) {
+      await this.page.mouse.move(sx + ((ex - sx) * i) / 12, sy + ((ey - sy) * i) / 12);
+      await this.page.waitForTimeout(50);
+    }
     await this.page.mouse.up();
     await this.page.waitForTimeout(1500);
+
+    const after = await formBuilder.canvasRows(frame).count();
+    if (after !== before + 1) {
+      throw new Error(`Drag-and-drop failed: canvas rows ${before} -> ${after}`);
+    }
   }
 
   async textboxCount() {
     return formBuilder.canvasRows(this.frame).count();
   }
 
+  /** Element IDs on canvas, e.g. ["TextBox0", "TextBox1"]. */
+  async canvasElementIds() {
+    const ids = await formBuilder.canvasElementLabels(this.frame).evaluateAll((nodes) =>
+      nodes.map((e) => e.id)
+    );
+    return ids.map((id) => id.replace('__label-non-editable', ''));
+  }
+
+  /**
+   * Selects the nth canvas element and sets its properties.
+   * Supported: label, minLength, maxLength, hintText, toolTip, defaultValue.
+   */
   async setTextboxProperties(index, props) {
     const frame = this.frame;
-    const rows = formBuilder.canvasRows(frame);
-    await rows.nth(index).click();
-    await this.page.waitForTimeout(1000);
+    await formBuilder.canvasRows(frame).nth(index).click();
+    if (!(await formBuilder.propLabel(frame).isVisible().catch(() => false))) {
+      await formBuilder.propertiesTab(frame).click();
+    }
+    await formBuilder.propLabel(frame).waitFor({ state: 'visible', timeout: 10_000 });
 
-    if (props.label !== undefined) {
-      const el = formBuilder.propLabel(frame);
-      await el.click();
-      await el.fill(props.label);
-    }
-    if (props.tooltip !== undefined) {
-      const el = formBuilder.propTooltip(frame);
-      if (await el.isVisible().catch(() => false)) await el.fill(props.tooltip);
-    }
-    if (props.defaultValue !== undefined) {
-      const el = formBuilder.propDefaultValue(frame);
-      if (await el.isVisible().catch(() => false)) await el.fill(props.defaultValue);
-    }
-    if (props.hintText !== undefined) {
-      const el = formBuilder.propHintText(frame);
-      if (await el.isVisible().catch(() => false)) await el.fill(props.hintText);
-    }
+    if (props.label !== undefined) await formBuilder.propLabel(frame).fill(props.label);
+    if (props.minLength !== undefined) await formBuilder.propMinLength(frame).fill(String(props.minLength));
+    if (props.maxLength !== undefined) await formBuilder.propMaxLength(frame).fill(String(props.maxLength));
+    if (props.hintText !== undefined) await formBuilder.propHintText(frame).fill(props.hintText);
+    if (props.toolTip !== undefined) await formBuilder.propToolTip(frame).fill(props.toolTip);
+    if (props.defaultValue !== undefined) await formBuilder.propDefaultValue(frame).fill(props.defaultValue);
+  }
+
+  /** Reads back the selected element's property values for assertions. */
+  async readSelectedProperties() {
+    const frame = this.frame;
+    return {
+      label: await formBuilder.propLabel(frame).inputValue(),
+      minLength: await formBuilder.propMinLength(frame).inputValue(),
+      maxLength: await formBuilder.propMaxLength(frame).inputValue(),
+      hintText: await formBuilder.propHintText(frame).inputValue(),
+      toolTip: await formBuilder.propToolTip(frame).inputValue(),
+      defaultValue: await formBuilder.propDefaultValue(frame).inputValue(),
+    };
   }
 
   async save() {
     await formBuilder.saveButton(this.frame).click();
-    await this.page.waitForTimeout(2000);
+    await this.page.waitForTimeout(3000);
   }
 
   async goToRulesTab() {
     await formBuilder.rulesTab(this.frame).click();
-    await this.page.waitForTimeout(1000);
+    await this.page.waitForTimeout(800);
   }
 
-  async close() {
-    await formBuilder.closeButton(this.frame).click();
-    await this.page.waitForTimeout(1500);
+  /** Text of the rules tab, e.g. "Form rules (3)". */
+  async rulesTabText() {
+    return (await formBuilder.rulesTab(this.frame).textContent()).trim();
+  }
+
+  /** Reloads the editor page (used to verify persistence after save). */
+  async reloadEditor() {
+    await this.page.reload();
+    await nav.editorIframe(this.page).waitFor({ state: 'visible', timeout: 45_000 });
+    await this.waitForEditorFrame();
+    await this.frameLocatorReady();
   }
 }
 

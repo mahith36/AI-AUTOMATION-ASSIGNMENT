@@ -1,153 +1,113 @@
 /**
  * Central locator registry for Automation Anywhere Community Edition.
  *
- * The form builder loads inside an iframe at modules/attended/,
- * so form-builder selectors target the iframe frameLocator.
+ * Every selector here was captured live against the real AA CE tenant
+ * (community.cloud.automationanywhere.digital) by driving the app and
+ * inspecting the DOM — not guessed.
  *
- * All selectors verified against real AA CE UI as of 2026-07-10.
+ * The form editor loads inside an iframe (modules/attended/#/file/form/{id}/edit).
+ * Locators marked (frame) must be called with the iframe's Frame object.
  */
 
 const login = {
   usernameInput: (page) => page.locator('input[name="username"]'),
   passwordInput: (page) => page.locator('input[name="password"]'),
-  submitButton: (page) => page.getByRole("button", { name: /^log in$/i }),
+  submitButton: (page) => page.getByRole('button', { name: /^log in$/i }),
 };
 
 const nav = {
-  // Main nav — Automation link opens bots repository  
-  automationLink: (page) => page.locator('a[href*="bots/repository"]').first(),
-  // Create button in Automation page header (there are two; use aria-label)
-  createDropdownButton: (page) =>
-    page.locator('button[aria-label="Create"][name="createOptions"]').first(),
-  // "Form…" in the Create dropdown — use :has-text for flexible matching
-  createFormOption: (page) =>
-    page.locator('button, a').filter({ hasText: 'Form' }).first(),
+  // "Create" button in the Automation (bots repository) page header
+  createButton: (page) => page.locator('button[aria-label="Create"]').first(),
+  // "Form…" entry in the Create dropdown — stable name attribute
+  createFormOption: (page) => page.locator('button[name="create-attended-form"]'),
+  // Create-form dialog
+  dialogNameInput: (page) => page.locator('[role="dialog"] input[name="name"]'),
+  dialogCreateEditButton: (page) =>
+    page.locator('[role="dialog"] button', { hasText: 'Create & edit' }),
+  // The form editor iframe element (page-level)
+  editorIframe: (page) => page.locator('iframe[src*="attended"]'),
 };
 
-/**
- * Form Builder (inside the iframe at modules/attended/#/file/form/{id}/edit)
- * Use frame.locator() to target elements inside the iframe.
- */
 const formBuilder = {
-  // Create Form dialog (outside iframe)
-  dialogFormNameInput: (page) =>
-    page.locator('[role="dialog"] input[name="name"]'),
-  dialogCreateEditButton: (page) =>
-    page.locator('[role="dialog"] button:has-text("Create & edit")'),
-
-  // Palette — all draggable items are button[name="item-button"]
+  // Palette item (frame) — e.g. paletteItem(frame, 'Text Box').
+  // NOTE: must scrollIntoViewIfNeeded() before drag; the list is long.
   paletteItem: (frame, label) =>
-    frame.locator('button[name="item-button"]').filter({ hasText: label }),
+    frame.locator('button[name="item-button"]', { hasText: label }),
 
-  // Canvas area — the left pane is the real drop target
-  canvasLeftPane: (frame) => frame.locator(".formcanvas__leftpane"),
-  // Drop target for drag-and-drop onto the canvas
-  canvasDropTarget: (frame) => frame.locator(".formcanvas__leftpane"),
-
-  // Fields on canvas — each added element creates a [data-item-type="row"]
+  // Canvas + dropped rows (frame)
+  canvas: (frame) => frame.locator('.formcanvas__leftpane'),
   canvasRows: (frame) =>
     frame.locator('.formcanvas__leftpane [data-item-type="row"]'),
+  // Each element's label node carries its element id, e.g. "TextBox0__label-non-editable".
+  canvasElementLabels: (frame) =>
+    frame.locator('.formcanvas__leftpane [id$="-non-editable"]'),
 
-  // Properties panel (right side)
-  propertiesTab: (frame) => frame.getByRole("tab", { name: /^properties$/i }),
-  propLabel: (frame) => frame.locator('input[name="title"]'),
-  propMinLength: (frame) => frame.getByLabel(/min.*length/i),
-  propMaxLength: (frame) => frame.getByLabel(/max.*length/i),
-  propHintText: (frame) => frame.getByLabel(/hint below field/i),
-  propTooltip: (frame) => frame.getByLabel(/tool tip/i),
-  propDefaultValue: (frame) => frame.getByLabel(/default value/i),
+  // Properties panel (frame) — real name attributes from the live DOM
+  propertiesTab: (frame) =>
+    frame.locator('[role="tab"]', { hasText: /^properties$/i }),
+  propElementId: (frame) => frame.locator('input[name="id"]'), // readonly
+  propLabel: (frame) => frame.locator('input[name="label"]'),
+  propDefaultValue: (frame) => frame.locator('input[name="defaultValue"]'),
+  propMinLength: (frame) => frame.locator('input[name="minLength"]'),
+  propMaxLength: (frame) => frame.locator('input[name="maxLength"]'),
+  propHintText: (frame) => frame.locator('input[name="hintText"]'),
+  propToolTip: (frame) => frame.locator('textarea[name="toolTip"]'),
 
-  // Save & Close buttons in the form editor header
-  saveButton: (frame) => frame.getByRole("button", { name: /^save$/i }),
-  closeButton: (frame) => frame.getByRole("button", { name: /^close$/i }),
+  // Header buttons (frame)
+  saveButton: (frame) => frame.locator('button[name="save"]'),
 
-  // Rules tab
-  rulesTab: (frame) => frame.getByRole("tab", { name: /form rules/i }),
+  // Rules tab (frame) — its text is "Form rules (N)"; aria-label is broken
+  // in the app ("[object Object]"), so match by text.
+  rulesTab: (frame) => frame.locator('[role="tab"]', { hasText: /form rules/i }),
 };
 
 const rulesBuilder = {
-  // Add Rule button in the rules panel
-  addRuleButton: (frame) => frame.getByRole("button", { name: /^add rule$/i }),
+  // "Add rule" button in the Form rules panel (frame)
+  addRuleButton: (frame) => frame.locator('button[aria-label="Add rule"]'),
 
-  // Rule card — identified by aria-label or containing text
+  // Rule cards (frame). Each card is a .rules-widget; its title is .rule-name.
+  ruleCards: (frame) => frame.locator('.rules-widget'),
   ruleCard: (frame, ruleName) =>
-    frame.locator('[class*="rule"]').filter({ hasText: ruleName }).first(),
+    frame.locator('.rules-widget').filter({
+      has: frame.locator('.rule-name', { hasText: ruleName }),
+    }),
+  ruleNames: (frame) => frame.locator('.rule-name'),
 
-  // Rule card header area
-  ruleCardHeader: (frame, ruleName) =>
-    rulesBuilder
-      .ruleCard(frame, ruleName)
-      .locator("text=" + ruleName)
-      .first(),
+  // Per-card header buttons (frame, scoped to a card locator)
+  editButton: (card) => card.locator('button[aria-label="edit"]').first(),
+  enabledToggle: (card) => card.locator('button[aria-label="Enabled"]'),
+  moreButton: (card) => card.locator('button[aria-label="More"]'),
 
-  // Edit button on rule card
-  ruleEditButton: (frame) => frame.getByRole("button", { name: /^edit$/i }),
+  // Condition / action section buttons (frame or card scope)
+  addConditionButton: (scope) => scope.locator('button[aria-label="Add condition"]'),
+  addGroupButton: (scope) => scope.locator('button[aria-label="Add Group"]'),
+  addActionButton: (scope) => scope.locator('button[aria-label="Add action"]'),
 
-  // Enabled/disabled toggle
-  ruleEnabledToggle: (frame) =>
-    frame.getByRole("button", { name: /^enabled$/i }),
+  // rio-select comboboxes are opened by clicking their query input, then an
+  // option is picked from the dropdown portal.
+  selectElementInputs: (scope) => scope.locator('input[placeholder="Select element"]'),
+  selectConditionInputs: (scope) => scope.locator('input[placeholder="Select condition"]'),
+  selectActionInputs: (scope) => scope.locator('input[placeholder="Select action"]'),
+  dropdownOption: (frame, text) =>
+    frame.locator('.rio-select-input-dropdown-option', { hasText: text }).first(),
+  dropdownOptions: (frame) => frame.locator('.rio-select-input-dropdown-option'),
 
-  // More/Context menu button on rule card
-  ruleMoreButton: (frame) => frame.getByRole("button", { name: /^more$/i }),
+  // Value field for value-based condition/action types (e.g. Contains, Set value).
+  valueInputs: (frame) => frame.locator('.rules-widget input[placeholder="Enter value"]'),
 
-  // "Add Rule Below" in context menu
-  addRuleBelowOption: (page) =>
-    page.getByRole("menuitem", { name: /add rule below/i }),
+  // AND/OR segmented control (rio-mode-input) and its radio buttons.
+  conditionModeInput: (frame) =>
+    frame.locator('.rio-condition-input-operator .rio-mode-input').first(),
+  conditionModeRadio: (modeInput, value) =>
+    modeInput.locator(`button[role="radio"][name="${value}"]`),
+  conditionModeSelected: (modeInput) =>
+    modeInput.locator('button[role="radio"][aria-selected="true"]'),
 
-  // Condition section
-  conditionElementDropdown: (frame) =>
-    frame
-      .locator(
-        '[class*="rule"] input[placeholder="Select element"], [class*="rule"] [role="combobox"]',
-      )
-      .first(),
+  // "Add rule below" item inside a rule card's More menu (renders in the iframe).
+  addRuleBelowItem: (frame) => frame.locator('button[name="action-add-rule-below"]'),
 
-  conditionTypeDropdown: (frame) =>
-    frame
-      .locator('[class*="rule"]')
-      .locator('select, [role="combobox"]')
-      .first(),
-
-  conditionValueInput: (frame) =>
-    frame.locator('[class*="rule"]').locator('input[type="text"]').last(),
-
-  addConditionButton: (frame) =>
-    frame.getByRole("button", { name: /add condition/i }),
-
-  // AND/OR group toggle
-  conditionModeToggle: (frame) =>
-    frame.locator('select, [role="combobox"]').filter({ hasText: /AND|OR/ }),
-
-  // Action section
-  addActionButton: (frame) =>
-    frame.getByRole("button", { name: /add action/i }),
-
-  actionTypeDropdown: (frame) =>
-    frame
-      .locator('[class*="rule"]')
-      .locator('select, [role="combobox"]')
-      .last(),
-
-  actionTargetDropdown: (frame) =>
-    frame
-      .locator('[class*="rule"]')
-      .locator('select, [role="combobox"]')
-      .nth(1),
-
-  actionValueInput: (frame) =>
-    frame.locator('[class*="rule"]').locator('input[type="text"]').last(),
-
-  // Full list of rule card names
-  ruleNamesInList: async (frame) => {
-    const cards = frame.locator('[class*="rule"]');
-    const count = await cards.count();
-    const names = [];
-    for (let i = 0; i < count; i++) {
-      const text = await cards.nth(i).textContent();
-      names.push(text);
-    }
-    return names;
-  },
+  // Generic combo containers within a rule card (used for the and/or selector)
+  combos: (scope) => scope.locator('.rio-select-input'),
 };
 
 module.exports = { login, nav, formBuilder, rulesBuilder };
