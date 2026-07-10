@@ -5,11 +5,7 @@ class BasePage {
   }
 
   async goto(path = '/') {
-    await this.page.goto(path);
-  }
-
-  async waitForVisible(locator, timeout = 10_000) {
-    await locator.waitFor({ state: 'visible', timeout });
+    await this.page.goto(path, { waitUntil: 'domcontentloaded' });
   }
 }
 
