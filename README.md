@@ -4,7 +4,7 @@ Playwright (JavaScript) UI + API automation for the **real** Automation Anywhere
 Community Edition web application, following the Page Object Model.
 
 Both use cases run against the live app at
-`https://community.cloud.automationanywhere.digital` — there are no mocks.
+`https://community.cloud.automationanywhere.digital` —
 
 - **Use Case 1 (UI):** Log in → create a Form → drag two Text Box elements onto
   the canvas → set their properties → save → Form rules: create Rule1, add two
@@ -79,7 +79,7 @@ tests/
   playwright-tests.yml            # CI (needs AA_EMAIL / AA_PASSWORD secrets)
 ```
 
-## How the app actually works (key technical notes)
+## How it actually works 
 
 These are the non-obvious realities that make the automation reliable; they were
 all confirmed against the live tenant.
